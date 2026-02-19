@@ -58,6 +58,16 @@ function App() {
   const [cart, setCart] = useState([])
   const [currentPage, setCurrentPage] = useState('order')
 
+  // 주문 목록 (주문하기에서 추가, 관리자에서 조회/상태 변경)
+  const [orders, setOrders] = useState([])
+
+  // 재고 현황 (메뉴 3개: 아메리카노 ICE, HOT, 카페라떼)
+  const [inventory, setInventory] = useState({
+    1: 10,
+    2: 8,
+    3: 3
+  })
+
   // 장바구니에 추가
   const addToCart = (item, selectedOptions) => {
     const optionNames = selectedOptions
@@ -122,8 +132,38 @@ function App() {
       alert('장바구니가 비어있습니다.')
       return
     }
+    const now = new Date()
+    const newOrder = {
+      id: Date.now(),
+      createdAt: now.toISOString(),
+      items: cart.map(c => ({
+        name: c.name,
+        options: c.options,
+        quantity: c.quantity,
+        price: c.price,
+        subtotal: c.price * c.quantity
+      })),
+      totalAmount,
+      status: '주문접수'
+    }
+    setOrders(prev => [newOrder, ...prev])
     alert(`주문이 완료되었습니다!\n총 금액: ${totalAmount.toLocaleString()}원`)
     setCart([])
+  }
+
+  // 재고 증가/감소
+  const updateInventory = (menuId, delta) => {
+    setInventory(prev => ({
+      ...prev,
+      [menuId]: Math.max(0, (prev[menuId] ?? 0) + delta)
+    }))
+  }
+
+  // 주문 상태 변경: 주문접수 -> 제조중
+  const startManufacturing = (orderId) => {
+    setOrders(prev =>
+      prev.map(o => (o.id === orderId ? { ...o, status: '제조중' } : o))
+    )
   }
 
   return (
@@ -237,10 +277,129 @@ function App() {
         </>
       )}
 
-      {/* 관리자 화면 (추후 구현) */}
+      {/* 관리자 화면 */}
       {currentPage === 'admin' && (
         <div className="admin-section">
-          <p>관리자 화면은 추후 구현 예정입니다.</p>
+          {/* 관리자 대시보드 요약 */}
+          <section className="admin-dashboard">
+            <h2 className="admin-section-title">관리자 대시보드</h2>
+            <div className="dashboard-cards">
+              <div className="dashboard-card">
+                <span className="dashboard-label">총 주문</span>
+                <span className="dashboard-value">{orders.length}</span>
+              </div>
+              <div className="dashboard-card">
+                <span className="dashboard-label">주문 접수</span>
+                <span className="dashboard-value">
+                  {orders.filter(o => o.status === '주문접수').length}
+                </span>
+              </div>
+              <div className="dashboard-card">
+                <span className="dashboard-label">제조중</span>
+                <span className="dashboard-value">
+                  {orders.filter(o => o.status === '제조중').length}
+                </span>
+              </div>
+              <div className="dashboard-card">
+                <span className="dashboard-label">완료</span>
+                <span className="dashboard-value">
+                  {orders.filter(o => o.status === '완료').length}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          {/* 재고 현황 */}
+          <section className="admin-inventory">
+            <h2 className="admin-section-title">재고 현황</h2>
+            <div className="inventory-cards">
+              {menuItems.slice(0, 3).map(item => {
+                const stock = inventory[item.id] ?? 0
+                const statusText =
+                  stock === 0 ? '품절' : stock < 5 ? '주의' : '정상'
+                const statusClass =
+                  stock === 0 ? 'out' : stock < 5 ? 'warn' : 'ok'
+                return (
+                  <div key={item.id} className="inventory-card">
+                    <div className="inventory-card-header">
+                      <span className="inventory-name">{item.name}</span>
+                      <span className={`inventory-status inventory-status--${statusClass}`}>
+                        {statusText}
+                      </span>
+                    </div>
+                    <div className="inventory-stock">{stock}개</div>
+                    <div className="inventory-controls">
+                      <button
+                        type="button"
+                        className="inventory-btn inventory-btn--minus"
+                        onClick={() => updateInventory(item.id, -1)}
+                        disabled={stock <= 0}
+                      >
+                        -
+                      </button>
+                      <button
+                        type="button"
+                        className="inventory-btn inventory-btn--plus"
+                        onClick={() => updateInventory(item.id, 1)}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+
+          {/* 주문 현황 */}
+          <section className="admin-orders">
+            <h2 className="admin-section-title">주문 현황</h2>
+            {orders.length === 0 ? (
+              <p className="admin-empty">접수된 주문이 없습니다.</p>
+            ) : (
+              <div className="order-list">
+                {orders.map(order => {
+                  const date = new Date(order.createdAt)
+                  const dateStr = `${date.getMonth() + 1}월 ${date.getDate()}일`
+                  const timeStr = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+                  return (
+                    <div key={order.id} className="order-card">
+                      <div className="order-card-header">
+                        <span className="order-datetime">
+                          {dateStr} {timeStr}
+                        </span>
+                        <span className={`order-badge order-badge--${order.status === '제조중' ? 'making' : 'received'}`}>
+                          {order.status}
+                        </span>
+                      </div>
+                      <div className="order-items">
+                        {order.items.map((line, i) => (
+                          <div key={i} className="order-item-line">
+                            {line.name}
+                            {line.options ? ` (${line.options})` : ''} × {line.quantity} — {line.subtotal.toLocaleString()}원
+                          </div>
+                        ))}
+                      </div>
+                      <div className="order-card-footer">
+                        <span className="order-total">
+                          총 금액 {order.totalAmount.toLocaleString()}원
+                        </span>
+                        {order.status === '주문접수' && (
+                          <button
+                            type="button"
+                            className="order-action-btn"
+                            onClick={() => startManufacturing(order.id)}
+                          >
+                            제조 시작
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </section>
         </div>
       )}
     </div>
