@@ -1,5 +1,16 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
+
+const STORAGE_KEYS = { cart: 'order-app-cart', orders: 'order-app-orders', inventory: 'order-app-inventory' }
+
+function loadFromStorage(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key)
+    return raw ? JSON.parse(raw) : fallback
+  } catch {
+    return fallback
+  }
+}
 
 function App() {
   // 임의의 커피 메뉴 데이터
@@ -54,19 +65,37 @@ function App() {
     { id: 'syrup', name: '시럽 추가', price: 0 }
   ]
 
-  // 장바구니 상태
-  const [cart, setCart] = useState([])
+  // 장바구니 상태 (localStorage 복원)
+  const [cart, setCart] = useState(() => loadFromStorage(STORAGE_KEYS.cart, []))
   const [currentPage, setCurrentPage] = useState('order')
 
-  // 주문 목록 (주문하기에서 추가, 관리자에서 조회/상태 변경)
-  const [orders, setOrders] = useState([])
+  // 주문 목록 (localStorage 복원)
+  const [orders, setOrders] = useState(() => loadFromStorage(STORAGE_KEYS.orders, []))
 
-  // 재고 현황 (메뉴 3개: 아메리카노 ICE, HOT, 카페라떼)
-  const [inventory, setInventory] = useState({
-    1: 10,
-    2: 8,
-    3: 3
-  })
+  // 재고 현황 (localStorage 복원)
+  const [inventory, setInventory] = useState(() => loadFromStorage(STORAGE_KEYS.inventory, { 1: 10, 2: 8, 3: 3 }))
+
+  // 토스트 알림
+  const [toast, setToast] = useState(null)
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  const showToast = (message) => setToast(message)
+
+  // localStorage 영속화
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.cart, JSON.stringify(cart))
+  }, [cart])
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.orders, JSON.stringify(orders))
+  }, [orders])
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.inventory, JSON.stringify(inventory))
+  }, [inventory])
 
   // 장바구니에 추가
   const addToCart = (item, selectedOptions) => {
@@ -114,22 +143,24 @@ function App() {
     ))
   }
 
-  // 수량 감소
+  // 수량 감소 (1일 때 - 누르면 장바구니에서 제거)
   const decreaseQuantity = (itemId) => {
-    setCart(cart.map(item =>
-      item.id === itemId
-        ? { ...item, quantity: Math.max(1, item.quantity - 1) }
-        : item
-    ))
+    setCart(
+      cart
+        .map(item =>
+          item.id === itemId ? { ...item, quantity: item.quantity - 1 } : item
+        )
+        .filter(item => item.quantity > 0)
+    )
   }
 
   // 총 금액 계산
   const totalAmount = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0)
 
-  // 주문하기
+  // 주문하기 (재고 반영 + 토스트 알림)
   const handleOrder = () => {
     if (cart.length === 0) {
-      alert('장바구니가 비어있습니다.')
+      showToast('장바구니가 비어있습니다.')
       return
     }
     const now = new Date()
@@ -147,8 +178,18 @@ function App() {
       status: '주문접수'
     }
     setOrders(prev => [newOrder, ...prev])
-    alert(`주문이 완료되었습니다!\n총 금액: ${totalAmount.toLocaleString()}원`)
     setCart([])
+    // 주문한 메뉴에 대해 재고 감소 (재고 관리 대상 메뉴만)
+    setInventory(prev => {
+      const next = { ...prev }
+      cart.forEach(c => {
+        if (c.itemId in next) {
+          next[c.itemId] = Math.max(0, (next[c.itemId] ?? 0) - c.quantity)
+        }
+      })
+      return next
+    })
+    showToast(`주문이 완료되었습니다! 총 금액: ${totalAmount.toLocaleString()}원`)
   }
 
   // 재고 증가/감소
@@ -166,21 +207,41 @@ function App() {
     )
   }
 
+  // 주문 상태 변경: 제조중 -> 완료
+  const completeOrder = (orderId) => {
+    setOrders(prev =>
+      prev.map(o => (o.id === orderId ? { ...o, status: '완료' } : o))
+    )
+  }
+
   return (
     <div className="app">
+      {/* 토스트 알림 */}
+      {toast && (
+        <div className="toast" role="status" aria-live="polite">
+          {toast}
+        </div>
+      )}
+
       {/* 헤더 영역 */}
       <header className="header">
         <div className="brand">COZY</div>
-        <nav className="navigation">
+        <nav className="navigation" aria-label="메인 메뉴">
           <button
+            type="button"
             className={`nav-button ${currentPage === 'order' ? 'active' : ''}`}
             onClick={() => setCurrentPage('order')}
+            aria-label="주문하기"
+            aria-current={currentPage === 'order' ? 'page' : undefined}
           >
             주문하기
           </button>
           <button
+            type="button"
             className={`nav-button ${currentPage === 'admin' ? 'active' : ''}`}
             onClick={() => setCurrentPage('admin')}
+            aria-label="관리자"
+            aria-current={currentPage === 'admin' ? 'page' : undefined}
           >
             관리자
           </button>
@@ -198,6 +259,7 @@ function App() {
                   key={item.id}
                   item={item}
                   options={options}
+                  inventory={inventory}
                   onAddToCart={addToCart}
                 />
               ))}
@@ -221,8 +283,10 @@ function App() {
                               src={item.image} 
                               alt={item.name}
                               onError={(e) => {
-                                e.target.style.display = 'none';
-                                e.target.nextSibling.style.display = 'flex';
+                                e.target.style.display = 'none'
+                                if (e.target.nextElementSibling) {
+                                  e.target.nextElementSibling.style.display = 'flex'
+                                }
                               }}
                             />
                           ) : null}
@@ -243,15 +307,21 @@ function App() {
                         </div>
                         <div className="cart-item-quantity-controls">
                           <button
+                            type="button"
                             className="quantity-button"
                             onClick={() => decreaseQuantity(item.id)}
+                            aria-label={`${item.name} 수량 감소`}
                           >
                             -
                           </button>
-                          <span className="cart-item-quantity">{item.quantity}</span>
+                          <span className="cart-item-quantity" aria-label={`${item.name} 수량 ${item.quantity}`}>
+                            {item.quantity}
+                          </span>
                           <button
+                            type="button"
                             className="quantity-button"
                             onClick={() => increaseQuantity(item.id)}
+                            aria-label={`${item.name} 수량 증가`}
                           >
                             +
                           </button>
@@ -267,7 +337,12 @@ function App() {
                     <span className="total-label">총 금액</span>
                     <span className="total-value">{totalAmount.toLocaleString()}원</span>
                   </div>
-                  <button className="order-button" onClick={handleOrder}>
+                  <button
+                    type="button"
+                    className="order-button"
+                    onClick={handleOrder}
+                    aria-label="주문하기"
+                  >
                     주문하기
                   </button>
                 </div>
@@ -334,6 +409,7 @@ function App() {
                         className="inventory-btn inventory-btn--minus"
                         onClick={() => updateInventory(item.id, -1)}
                         disabled={stock <= 0}
+                        aria-label={`${item.name} 재고 감소`}
                       >
                         -
                       </button>
@@ -341,6 +417,7 @@ function App() {
                         type="button"
                         className="inventory-btn inventory-btn--plus"
                         onClick={() => updateInventory(item.id, 1)}
+                        aria-label={`${item.name} 재고 증가`}
                       >
                         +
                       </button>
@@ -368,13 +445,16 @@ function App() {
                         <span className="order-datetime">
                           {dateStr} {timeStr}
                         </span>
-                        <span className={`order-badge order-badge--${order.status === '제조중' ? 'making' : 'received'}`}>
+                        <span className={`order-badge order-badge--${order.status === '완료' ? 'complete' : order.status === '제조중' ? 'making' : 'received'}`}>
                           {order.status}
                         </span>
                       </div>
                       <div className="order-items">
                         {order.items.map((line, i) => (
-                          <div key={i} className="order-item-line">
+                          <div
+                            key={`${order.id}-${line.name}-${line.options ?? ''}-${line.quantity}-${i}`}
+                            className="order-item-line"
+                          >
                             {line.name}
                             {line.options ? ` (${line.options})` : ''} × {line.quantity} — {line.subtotal.toLocaleString()}원
                           </div>
@@ -389,8 +469,19 @@ function App() {
                             type="button"
                             className="order-action-btn"
                             onClick={() => startManufacturing(order.id)}
+                            aria-label="제조 시작"
                           >
                             제조 시작
+                          </button>
+                        )}
+                        {order.status === '제조중' && (
+                          <button
+                            type="button"
+                            className="order-action-btn order-action-btn--complete"
+                            onClick={() => completeOrder(order.id)}
+                            aria-label="제조 완료"
+                          >
+                            제조 완료
                           </button>
                         )}
                       </div>
@@ -407,10 +498,14 @@ function App() {
 }
 
 // 메뉴 아이템 카드 컴포넌트
-function MenuItemCard({ item, options, onAddToCart }) {
+function MenuItemCard({ item, options, inventory = {}, onAddToCart }) {
   const [selectedOptions, setSelectedOptions] = useState(
     options.map(opt => ({ ...opt, selected: false }))
   )
+
+  // 재고가 있는 메뉴만 담기 가능 (재고 키가 없으면 품절 아님)
+  const hasStock = inventory[item.id] === undefined || inventory[item.id] > 0
+  const isOutOfStock = inventory[item.id] !== undefined && inventory[item.id] <= 0
 
   const handleOptionChange = (optionId) => {
     setSelectedOptions(selectedOptions.map(opt =>
@@ -419,21 +514,24 @@ function MenuItemCard({ item, options, onAddToCart }) {
   }
 
   const handleAddToCart = () => {
+    if (!hasStock) return
     onAddToCart(item, selectedOptions)
     // 옵션 초기화
     setSelectedOptions(options.map(opt => ({ ...opt, selected: false })))
   }
 
   return (
-    <div className="menu-card">
+    <div className={`menu-card ${isOutOfStock ? 'menu-card--out' : ''}`}>
       <div className="menu-image">
         {item.image ? (
           <img 
             src={item.image} 
             alt={item.name}
             onError={(e) => {
-              e.target.style.display = 'none';
-              e.target.nextSibling.style.display = 'flex';
+              e.target.style.display = 'none'
+              if (e.target.nextElementSibling) {
+                e.target.nextElementSibling.style.display = 'flex'
+              }
             }}
           />
         ) : null}
@@ -446,6 +544,7 @@ function MenuItemCard({ item, options, onAddToCart }) {
       </div>
       <div className="menu-info">
         <h3 className="menu-name">{item.name}</h3>
+        {isOutOfStock && <span className="menu-out-badge">품절</span>}
         <p className="menu-price">{item.price.toLocaleString()}원</p>
         <p className="menu-description">{item.description}</p>
         <div className="menu-options">
@@ -455,6 +554,7 @@ function MenuItemCard({ item, options, onAddToCart }) {
                 type="checkbox"
                 checked={option.selected}
                 onChange={() => handleOptionChange(option.id)}
+                disabled={isOutOfStock}
               />
               <span>
                 {option.name} ({option.price > 0 ? `+${option.price.toLocaleString()}원` : '+0원'})
@@ -462,8 +562,14 @@ function MenuItemCard({ item, options, onAddToCart }) {
             </label>
           ))}
         </div>
-        <button className="add-to-cart-button" onClick={handleAddToCart}>
-          담기
+        <button
+          type="button"
+          className="add-to-cart-button"
+          onClick={handleAddToCart}
+          disabled={isOutOfStock}
+          aria-label={isOutOfStock ? `${item.name} 품절` : `${item.name} 장바구니에 담기`}
+        >
+          {isOutOfStock ? '품절' : '담기'}
         </button>
       </div>
     </div>
