@@ -245,3 +245,131 @@
 - 주문 목록은 최신 주문이 상단에 표시되도록 정렬
 - 재고 수량은 명확하고 읽기 쉽게 표시
 - 주문 정보는 한눈에 파악할 수 있도록 구조화하여 표시
+
+## 6. 백엔드(PRD) - 데이터 모델 / 흐름 / API 설계
+
+### 6.1 데이터 모델
+
+#### 6.1.1 Menus (커피 메뉴)
+- **필수 필드**
+  - 메뉴 ID
+  - 커피 이름
+  - 설명
+  - 가격
+  - 이미지(URL 또는 경로)
+  - 재고 수량
+
+#### 6.1.2 Options (메뉴 옵션)
+- **필수 필드**
+  - 옵션 ID
+  - 옵션 이름
+  - 옵션 가격
+  - 연결할 메뉴 ID (어떤 메뉴에 속한 옵션인지)
+
+#### 6.1.3 Orders (주문)
+- **필수 필드**
+  - 주문 ID
+  - 주문 일시
+  - 주문 상태
+  - 주문 내용 (메뉴, 수량, 옵션, 금액)
+
+> 참고: `Orders.주문 내용`은 관계형 DB에서는 JSON 컬럼 또는 상세 테이블(예: OrderItems/OrderItemOptions)로 구현할 수 있습니다. (6.2 스키마 참고)
+
+### 6.2 데이터 스키마(예시) 및 관계
+
+#### 6.2.1 스키마(예: PostgreSQL)
+- **menus**
+  - id (PK)
+  - name (커피 이름)
+  - description
+  - price
+  - image_url
+  - stock_quantity
+  - created_at / updated_at
+
+- **options**
+  - id (PK)
+  - menu_id (FK -> menus.id)
+  - name (옵션 이름)
+  - price (옵션 가격)
+  - created_at / updated_at
+
+- **orders**
+  - id (PK)
+  - ordered_at (주문 일시)
+  - status (주문 상태)
+  - total_amount (주문 총액)
+  - created_at / updated_at
+
+- **order_items** (주문 내용의 메뉴/수량/금액)
+  - id (PK)
+  - order_id (FK -> orders.id)
+  - menu_id (FK -> menus.id)
+  - quantity (수량)
+  - unit_price (주문 시점 메뉴 가격)
+  - line_amount (unit_price * quantity)
+
+- **order_item_options** (주문 내용의 옵션/금액)
+  - id (PK)
+  - order_item_id (FK -> order_items.id)
+  - option_id (FK -> options.id)
+  - option_price (주문 시점 옵션 가격)
+
+#### 6.2.2 주문 상태 정의
+- **기본 상태**: `주문 접수`
+- **상태 변경 흐름(관리자)**: `주문 접수` -> `제조 중` -> `완료`
+
+### 6.3 데이터 스키마를 위한 사용자 흐름
+
+#### 6.3.1 주문하기 화면: 메뉴 조회
+- 백엔드는 `Menus` 데이터를 조회해 브라우저 화면에 표시할 수 있도록 제공한다.
+- 이때 `Menus`의 **재고 수량(stock_quantity)**은 **관리자 화면**에서만 표시한다. (주문하기 화면에서는 노출하지 않음)
+
+#### 6.3.2 주문하기 화면: 장바구니 담기
+- 사용자가 앱 화면에서 커피 메뉴를 선택해 담는다.
+- 선택 정보(메뉴, 수량, 옵션, 금액)는 프런트의 장바구니에 표시된다.
+
+#### 6.3.3 주문하기: 주문 저장
+- 장바구니에서 `주문하기` 버튼을 클릭하면 백엔드는 주문 정보를 `Orders`에 저장한다.
+- `Orders`에는 주문 시간과 주문 내용(메뉴, 수량, 옵션, 금액)을 담는다.
+- 주문 생성 시, 주문 수량만큼 `Menus.stock_quantity`를 감소시킨다.
+  - 재고 차감은 **주문 생성과 같은 트랜잭션**으로 처리하여 데이터 정합성을 유지한다.
+  - 재고가 부족한 경우 주문을 실패 처리한다.
+
+#### 6.3.4 관리자 화면: 주문 현황 표시 및 상태 변경
+- 백엔드는 `Orders`의 정보를 관리자 화면의 `주문 현황`에 표시하도록 제공한다.
+- 주문의 기본 상태는 `주문 접수`이다.
+- 관리자 화면에서 `주문 접수`를 클릭하면 `제조 중` -> `완료` 순으로 상태가 변경된다.
+
+### 6.4 API 설계
+
+#### 6.4.1 메뉴 목록 조회 (주문하기 화면)
+- **목적**: `주문하기` 메뉴를 클릭하면 데이터베이스에서 커피 메뉴 목록을 불러와서 보여준다.
+- **Endpoint**: `GET /api/menus`
+- **응답(예시)**:
+  - 메뉴 목록: id, name, description, price, image_url
+  - 관리자용 조회가 필요하면 `GET /api/admin/menus`에서 stock_quantity 포함
+
+#### 6.4.2 주문 생성 (주문하기 버튼)
+- **목적**: 사용자가 커피를 선택하고 주문하기 버튼을 클릭하면 주문 정보를 데이터베이스에 저장한다.
+- **Endpoint**: `POST /api/orders`
+- **요청(예시)**:
+  - items: [{ menu_id, quantity, option_ids[] }]
+- **처리 규칙**
+  - 주문 정보를 `orders / order_items / order_item_options`에 저장
+  - 주문 정보에 따라 메뉴 목록의 재고(`menus.stock_quantity`)도 함께 수정(차감)
+  - 기본 주문 상태는 `주문 접수`
+
+#### 6.4.3 주문 조회 (주문 ID로 단건 조회)
+- **목적**: 주문 ID를 전달하면 해당 주문 정보를 보여준다.
+- **Endpoint**: `GET /api/orders/:orderId`
+- **응답(예시)**:
+  - order: id, ordered_at, status, items(메뉴/수량/옵션/금액), total_amount
+
+#### 6.4.4 관리자: 주문 목록 조회 및 상태 변경
+- **주문 목록 조회**
+  - **Endpoint**: `GET /api/admin/orders`
+  - **정렬**: 최신 주문이 상단(ordered_at DESC)
+- **주문 상태 변경**
+  - **Endpoint**: `PATCH /api/admin/orders/:orderId/status`
+  - **처리**: `주문 접수` -> `제조 중` -> `완료` 순서로 상태 전환

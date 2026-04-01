@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets (commit .env.example as a template only)
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Test & coverage
+coverage/
+.nyc_output/
+
+# Build output (if added later)
+dist/
+build/
+
+# Misc
+*.pid
+.cache/
