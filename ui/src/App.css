@@ -60,6 +60,18 @@
   color: white;
 }
 
+.page-hint {
+  margin: 0 0 1rem;
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.page-error {
+  margin: 0 0 1rem;
+  color: #c62828;
+  font-size: 0.95rem;
+}
+
 /* 메뉴 섹션 */
 .menu-section {
   padding: 2rem;

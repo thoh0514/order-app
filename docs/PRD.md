@@ -16,7 +16,7 @@
 ## 2. 기술 스택
 - 프런트엔드 : HTML, CSS, React, Javascript
 - 백엔드 : Node.js, Express
-- 데이터베이스 : PstgreSQL
+- 데이터베이스 : PostgreSQL
 
 ## 3. 기본 사항
 - 프런트엔드와 백엔드를 따로 개발
