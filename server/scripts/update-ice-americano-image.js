@@ -1,11 +1,11 @@
 /**
- * DB만 갱신: 아메리카노(ICE) → 로컬 참조 이미지 (ui/public/menu/ice-americano.png).
+ * DB만 갱신: 아메리카노(ICE) → 로컬 참조 이미지 (ui/public/menu/americano-ice.jpg).
  * Run: node scripts/update-ice-americano-image.js
  */
 require("dotenv").config({ path: require("path").join(__dirname, "..", ".env") });
 const { pool } = require("../db");
 
-const IMAGE_URL = "/menu/ice-americano.png";
+const IMAGE_URL = "/menu/americano-ice.jpg";
 
 async function main() {
   const { rowCount } = await pool.query(

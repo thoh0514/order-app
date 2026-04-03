@@ -14,8 +14,8 @@ const menus = [
     name: "아메리카노(ICE)",
     description: "시원하고 깔끔한 아이스 아메리카노",
     price: 4000,
-    /** UI 정적 자산: ui/public/menu/ice-americano.png (Vite 루트 기준 경로) */
-    image_url: "/menu/ice-americano.png",
+    /** UI 정적 자산: ui/public/menu/americano-ice.jpg (Vite 루트 기준 경로) */
+    image_url: "/menu/americano-ice.jpg",
     stock_quantity: 10,
     options: [
       { name: "샷 추가", price: 500 },
@@ -26,7 +26,8 @@ const menus = [
     name: "아메리카노(HOT)",
     description: "따뜻하고 진한 핫 아메리카노",
     price: 4000,
-    image_url: img("photo-1509042239860-f550ce710b93"),
+    /** UI 정적 자산: ui/public/menu/americano-hot.jpg (Vite 루트 기준 경로) */
+    image_url: "/menu/americano-hot.jpg",
     stock_quantity: 8,
     options: [
       { name: "샷 추가", price: 500 },
@@ -59,7 +60,8 @@ const menus = [
     name: "카라멜 마키아토",
     description: "달콤한 카라멜과 에스프레소의 만남",
     price: 6000,
-    image_url: img("photo-1570968914863-906a7e34a8e0"),
+    /** UI 정적 자산: ui/public/menu/caramel-macchiato.jpg (Vite 루트 기준 경로) */
+    image_url: "/menu/caramel-macchiato.jpg",
     stock_quantity: 6,
     options: [
       { name: "샷 추가", price: 500 },
